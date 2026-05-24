@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Credential Gateway Admin</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f0f1a;color:#e0e0e0;min-height:100vh}
+  .app{max-width:1100px;margin:0 auto;padding:24px 16px}
+  header{padding:24px 0;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:18px;color:#fff}
+  .card{background:#1a1a2e;border-radius:8px;padding:0;margin-bottom:16px;border:1px solid #2a2a3e;overflow:hidden}
+  .card-header{padding:14px 20px;border-bottom:1px solid #2a2a3e;font-size:14px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:10px 20px;text-align:left;border-bottom:1px solid #1f1f35}
+  th{font-weight:600;color:#888;font-size:11px;text-transform:uppercase}
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px}
+  .badge-active{background:#064e3b;color:#6ee7b7}
+  .badge-revoked{background:#7f1d1d;color:#fca5a5}
+  .btn{padding:4px 10px;border:none;border-radius:4px;cursor:pointer;font-size:11px}
+  .btn-del{background:#7f1d1d;color:#fca5a5}
+  .btn-del:hover{background:#991b1b}
+  .btn-refresh{background:#1a1a2e;color:#ccc;border:1px solid #2a2a3e}
+  .btn-refresh:hover{background:#2a2a3e}
+  .loading{text-align:center;padding:40px;color:#888}
+  .empty{text-align:center;padding:40px;color:#666;font-size:13px}
+  .tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid #2a2a3e}
+  .tab{padding:10px 16px;cursor:pointer;font-size:13px;color:#888;border-bottom:2px solid transparent}
+  .tab.active{color:#fff;border-bottom-color:#6366f1}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+  .token-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:#888;margin-bottom:16px}
+  .token-bar input{background:#0f0f1a;border:1px solid #2a2a3e;color:#e0e0e0;padding:4px 8px;border-radius:4px;font-size:12px;width:200px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Credential Gateway Admin</h1>
+    <div class="token-bar">
+      Token <input type="text" id="adminToken" value="admin-secret-change-me" onchange="saveToken()">
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-panel="apps">Applications</div>
+    <div class="tab" data-panel="creds">Credentials</div>
+    <div class="tab" data-panel="logs">Access Logs</div>
+  </div>
+
+  <div id="panel-apps" class="tab-panel active">
+    <div class="card">
+      <div class="card-header">
+        <span>Applications</span>
+        <button class="btn btn-refresh" onclick="loadApps()">Refresh</button>
+      </div>
+      <div id="apps-table"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+  <div id="panel-creds" class="tab-panel">
+    <div class="card">
+      <div class="card-header">
+        <span>Credentials</span>
+        <button class="btn btn-refresh" onclick="loadCreds()">Refresh</button>
+      </div>
+      <div id="creds-table"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+  <div id="panel-logs" class="tab-panel">
+    <div class="card">
+      <div class="card-header">
+        <span>Access Logs</span>
+      </div>
+      <div id="logs-table"><div class="empty">Logs not available via admin API</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TK = () => document.getElementById('adminToken').value;
+function saveToken() { localStorage.setItem('cg_admin_token', document.getElementById('adminToken').value); }
+const ah = () => ({ 'X-Admin-Token': TK() });
+const BASE = window.location.origin;
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.panel).classList.add('active');
+    if (t.dataset.panel === 'apps') loadApps();
+    if (t.dataset.panel === 'creds') loadCreds();
+  });
+});
+
+async function loadApps() {
+  const el = document.getElementById('apps-table');
+  try {
+    const r = await fetch(BASE + '/v1/applications', { headers: ah() });
+    if (!r.ok) throw new Error(r.status);
+    const apps = await r.json();
+    if (!apps.length) { el.innerHTML = '<div class="empty">No applications.</div>'; return; }
+    el.innerHTML = '<table><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>' +
+      apps.map(a => '<tr>' +
+        '<td><code>' + a.id.slice(0,8) + '...</code></td>' +
+        '<td>' + esc(a.name) + '</td>' +
+        '<td><span class="badge badge-' + a.status + '">' + a.status + '</span></td>' +
+        '<td>' + new Date(a.created_at).toLocaleString() + '</td>' +
+        '<td><button class="btn btn-del" onclick="revokeApp(\'' + a.id + '\')">Revoke</button></td>' +
+      '</tr>').join('') + '</tbody></table>';
+  } catch(e) { el.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
+}
+
+async function revokeApp(id) {
+  if (!confirm('Revoke application ' + id.slice(0,8) + '? All its credentials become inaccessible.')) return;
+  await fetch(BASE + '/v1/applications/' + id, { method: 'DELETE', headers: ah() });
+  loadApps();
+  loadCreds();
+}
+
+async function loadCreds() {
+  const el = document.getElementById('creds-table');
+  try {
+    const r = await fetch(BASE + '/v1/applications', { headers: ah() });
+    if (!r.ok) throw new Error(r.status);
+    const apps = await r.json();
+    let rows = [];
+    for (const app of apps) {
+      try {
+        const cr = await fetch(BASE + '/v1/credentials', { headers: { ...ah(), 'X-App-Id': app.id, 'X-Signature': 'admin' } });
+        // This won't work without real auth. Skip and just show we need auth.
+      } catch(e) {}
+    }
+    // For now, show credentials via a simpler approach: list from the apps perspective
+    el.innerHTML = '<div class="empty">Credentials listing requires per-app authentication. Use the API directly or SQLite browser.</div>';
+  } catch(e) { el.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+const saved = localStorage.getItem('cg_admin_token');
+if (saved) document.getElementById('adminToken').value = saved;
+loadApps();
+</script>
+</body>
+</html>

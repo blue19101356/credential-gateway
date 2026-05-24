@@ -1,0 +1,10 @@
+﻿# .gitignore for credential-gateway
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.db
+.env
+*.pem
+.pytest_cache/
+uvicorn.log

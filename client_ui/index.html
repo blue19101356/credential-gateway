@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Credential Gateway</title>
+
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f0f1a;color:#e0e0e0;min-height:100vh}
+  .app{max-width:720px;margin:0 auto;padding:24px 16px}
+  header{padding:32px 0 24px}
+  header h1{font-size:20px;font-weight:600;color:#fff}
+  header p{font-size:13px;color:#888;margin-top:4px}
+  .status-bar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:#1a1a2e;border-radius:6px;margin-bottom:20px;font-size:12px}
+  .status-dot{width:8px;height:8px;border-radius:50%}
+  .status-dot.ok{background:#4ade80}
+  .status-dot.err{background:#f87171}
+  .status-dot.pending{background:#fbbf24}
+  .card{background:#1a1a2e;border-radius:8px;padding:20px;margin-bottom:16px;border:1px solid #2a2a3e}
+  .card h2{font-size:15px;font-weight:600;margin-bottom:16px;color:#fff}
+  label{display:block;font-size:12px;color:#999;margin-bottom:4px}
+  input,textarea,select{width:100%;padding:9px 12px;background:#0f0f1a;border:1px solid #2a2a3e;border-radius:4px;color:#e0e0e0;font-size:13px;font-family:inherit;margin-bottom:12px}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:#6366f1}
+  textarea{min-height:80px;resize:vertical;font-family:"SF Mono","Cascadia Code",monospace}
+  button{padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:500}
+  .btn-primary{background:#6366f1;color:#fff}
+  .btn-primary:hover{background:#5558e6}
+  .btn-secondary{background:#2a2a3e;color:#ccc}
+  .btn-sm{padding:4px 10px;font-size:11px}
+  .row{display:flex;gap:8px;align-items:end}
+  .row>*{flex:1}
+  .row button{flex:0 0 auto}
+  .key-display{background:#0f0f1a;border:1px solid #2a2a3e;border-radius:4px;padding:12px;font-family:"SF Mono","Cascadia Code",monospace;font-size:11px;color:#888;max-height:140px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-bottom:12px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px}
+  .badge-ok{background:#064e3b;color:#6ee7b7}
+  .badge-err{background:#7f1d1d;color:#fca5a5}
+  .cred-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #2a2a3e;font-size:13px}
+  .cred-row:last-child{border-bottom:none}
+  .cred-info strong{color:#fff}
+  .cred-info span{color:#888;font-size:11px;margin-left:8px}
+  .secret-result{background:#0f0f1a;border:1px solid #4ade80;border-radius:4px;padding:12px;font-family:"SF Mono","Cascadia Code",monospace;font-size:13px;color:#4ade80;word-break:break-all;margin-top:8px}
+  .hidden{display:none}
+  .tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid #2a2a3e}
+  .tab{padding:10px 16px;cursor:pointer;font-size:13px;color:#888;border-bottom:2px solid transparent}
+  .tab.active{color:#fff;border-bottom-color:#6366f1}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+  .help-text{font-size:11px;color:#666;margin-top:-8px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Credential Gateway</h1>
+    <p>Zero-Knowledge Credential Manager &middot; Keys Never Leave Your Browser</p>
+  </header>
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Not Connected</span>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-panel="setup">1. Setup</div>
+    <div class="tab" data-panel="store">2. Store</div>
+    <div class="tab" data-panel="retrieve">3. Retrieve</div>
+    <div class="tab" data-panel="list">4. List</div>
+  </div>
+  <div id="panel-setup" class="tab-panel active">
+    <div class="card">
+      <h2>Generate Key Pairs</h2>
+      <p class="help-text">Keys are generated in your browser. Private keys never leave your machine.</p>
+      <button class="btn-primary" id="btnGenerateKeys">Generate New Keys</button>
+      <div id="keyOutput" class="key-display hidden"></div>
+      <button class="btn-secondary btn-sm hidden" id="btnDownloadKeys">Download Key Files</button>
+    </div>
+    <div class="card">
+      <h2>Register with Gateway</h2>
+      <label>Gateway URL</label>
+      <input type="text" id="gatewayUrl" value="http://127.0.0.1:8000" placeholder="http://127.0.0.1:8000">
+      <label>Application Name</label>
+      <input type="text" id="appName" placeholder="my-app">
+      <button class="btn-primary" id="btnRegister">Register</button>
+      <div id="regResult" class="hidden" style="margin-top:12px"></div>
+    </div>
+  </div>
+  <div id="panel-store" class="tab-panel">
+    <div class="card">
+      <h2>Store Credential</h2>
+      <label>Credential Type</label>
+      <select id="credType">
+        <option value="api_key">API Key</option>
+        <option value="db_password">Database Password</option>
+        <option value="ssh_key">SSH Key</option>
+        <option value="cloud_key">Cloud Key</option>
+        <option value="generic">Generic</option>
+      </select>
+      <label>Credential Name</label>
+      <input type="text" id="credName" placeholder="e.g. openai-prod-key">
+      <label>Credential Value (plaintext, encrypted before storage)</label>
+      <textarea id="credValue" placeholder="sk-..."></textarea>
+      <label>Tags (optional)</label>
+      <input type="text" id="credTags" placeholder="production, openai">
+      <button class="btn-primary" id="btnStore">Encrypt &amp; Store</button>
+      <div id="storeResult" class="hidden" style="margin-top:12px"></div>
+    </div>
+  </div>
+  <div id="panel-retrieve" class="tab-panel">
+    <div class="card">
+      <h2>Retrieve &amp; Decrypt</h2>
+      <label>Credential ID</label>
+      <div class="row">
+        <input type="text" id="retrieveCredId" placeholder="Paste credential ID">
+        <button class="btn-primary" id="btnRetrieve">Retrieve</button>
+      </div>
+      <div id="retrieveResult" class="secret-result hidden"></div>
+    </div>
+  </div>
+  <div id="panel-list" class="tab-panel">
+    <div class="card">
+      <h2>Stored Credentials</h2>
+      <button class="btn-secondary btn-sm" id="btnRefreshList" style="margin-bottom:12px">Refresh List</button>
+      <div id="credList">Click Refresh to load credentials</div>
+    </div>
+  </div>
+</div>
+<script type="module">
+import { ed25519, x25519 } from './vendor/ed25519.js';
+
+const GATEWAY_URL = () => document.getElementById('gatewayUrl').value.trim();
+const APP_ID = () => localStorage.getItem('cg_app_id');
+const SIGNING_KEY_RAW = () => { const k = localStorage.getItem('cg_signing_key'); return k ? hexToBytes(k) : null; };
+const ENC_KEY_RAW = () => { const k = localStorage.getItem('cg_enc_key'); return k ? hexToBytes(k) : null; };
+const SIGN_PUB_PEM = () => localStorage.getItem('cg_sign_pub_pem');
+const ENC_PUB_PEM = () => localStorage.getItem('cg_enc_pub_pem');
+
+function hexToBytes(hex) { const b = new Uint8Array(hex.length/2); for(let i=0;i<b.length;i++) b[i]=parseInt(hex.substr(i*2,2),16); return b; }
+function bytesToHex(b) { return [...b].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+function base64ToBytes(b64) { const bin=atob(b64); return Uint8Array.from(bin,c=>c.charCodeAt(0)); }
+function bytesToBase64(b) { return btoa(String.fromCharCode(...b)); }
+function concat(...arrs) { const total = arrs.reduce((s,a) => s + a.length, 0); const r = new Uint8Array(total); let off = 0; for (const a of arrs) { r.set(a, off); off += a.length; } return r; }
+
+function derEncode(tag, content) { return concat(new Uint8Array([tag]), derLength(content.length), content); }
+function derLength(n) { if (n < 128) return new Uint8Array([n]); const bytes = []; let v = n; while (v) { bytes.unshift(v & 0xff); v >>>= 8; } return new Uint8Array([0x80 | bytes.length, ...bytes]); }
+
+function pemEncode(der, label) {
+  const b64 = bytesToBase64(der);
+  const lines = b64.match(/.{1,64}/g).join('\n');
+  return '-----BEGIN ' + label + '-----\n' + lines + '\n-----END ' + label + '-----';
+}
+
+async function generateEd25519Keypair() {
+  const seed = crypto.getRandomValues(new Uint8Array(32));
+  const pub = ed25519.getPublicKey(seed);
+  return { seed, pub };
+}
+
+function generateX25519Keypair() {
+  const seed = crypto.getRandomValues(new Uint8Array(32));
+  const pub = x25519.getPublicKey(seed);
+  return { seed, pub };
+}
+
+async function ed25519PrivToPem(seed) {
+  const pub = ed25519.getPublicKey(seed);
+  const inner = new Uint8Array(34); inner[0]=0x04; inner[1]=0x20; inner.set(seed, 2);
+  const pubWrapped = new Uint8Array(34); pubWrapped[0]=0x03; pubWrapped[1]=0x20; pubWrapped.set(pub, 2);
+  const octetStr = derEncode(0x04, derEncode(0x30, concat(inner, pubWrapped)));
+  const oid = new Uint8Array([0x06, 0x03, 0x2b, 0x65, 0x70]);
+  const algId = derEncode(0x30, oid);
+  const body = derEncode(0x30, concat(new Uint8Array([0x02, 0x01, 0x00]), algId, octetStr));
+  return pemEncode(body, 'PRIVATE KEY');
+}
+
+function x25519PrivToPem(seed) {
+  const octetStr = derEncode(0x04, new Uint8Array([0x04, 0x20, ...seed]));
+  const oid = new Uint8Array([0x06, 0x03, 0x2b, 0x65, 0x6e]);
+  const algId = derEncode(0x30, oid);
+  const body = derEncode(0x30, concat(new Uint8Array([0x02, 0x01, 0x00]), algId, octetStr));
+  return pemEncode(body, 'PRIVATE KEY');
+}
+
+function ed25519PubToPem(pub) {
+  const oid = new Uint8Array([0x06, 0x03, 0x2b, 0x65, 0x70]);
+  const algId = derEncode(0x30, oid);
+  const bits = derEncode(0x03, new Uint8Array([0x00, ...pub]));
+  return pemEncode(derEncode(0x30, concat(algId, bits)), 'PUBLIC KEY');
+}
+
+function x25519PubToPem(pub) {
+  const oid = new Uint8Array([0x06, 0x03, 0x2b, 0x65, 0x6e]);
+  const algId = derEncode(0x30, oid);
+  const bits = derEncode(0x03, new Uint8Array([0x00, ...pub]));
+  return pemEncode(derEncode(0x30, concat(algId, bits)), 'PUBLIC KEY');
+}
+
+async function eciesDecrypt(b64Ciphertext, x25519PrivSeed) {
+  const raw = base64ToBytes(b64Ciphertext);
+  const ephemPub = raw.slice(0, 32);
+  const nonce = raw.slice(32, 44);
+  const ciphertext = raw.slice(44, -16);
+  const tag = raw.slice(-16);
+  const shared = x25519.getSharedSecret(x25519PrivSeed, ephemPub);
+  const aesKey = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode('credential-gateway-ecies-v1') },
+    await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveBits']), 256);
+  const ciphertextWithTag = concat(ciphertext, tag);
+  const key = await crypto.subtle.importKey('raw', aesKey, 'AES-GCM', false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, key, ciphertextWithTag);
+  return new TextDecoder().decode(plain);
+}
+
+async function signRequest(bodyBytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bodyBytes);
+  return bytesToHex(ed25519.sign(new Uint8Array(digest), SIGNING_KEY_RAW()));
+}
+
+function setStatus(ok, text) {
+  document.getElementById('statusDot').className = 'status-dot ' + (ok === null ? 'pending' : ok ? 'ok' : 'err');
+  document.getElementById('statusText').textContent = text;
+}
+
+function updateConnectionStatus() {
+  if (APP_ID()) {
+    setStatus(true, 'Connected - App: ' + APP_ID().slice(0,8) + '...');
+    document.querySelectorAll('.tab').forEach((t,i) => { if(i>0) t.style.display=''; });
+  } else {
+    setStatus(null, 'Not registered - Generate keys and register first');
+    document.querySelectorAll('.tab').forEach((t,i) => { if(i>0) t.style.display='none'; });
+    document.querySelector('.tab').click();
+  }
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.panel).classList.add('active');
+  });
+});
+
+document.getElementById('btnGenerateKeys').addEventListener('click', async () => {
+  try {
+    const sign = await generateEd25519Keypair();
+    const enc = generateX25519Keypair();
+    const signPrivPem = await ed25519PrivToPem(sign.seed);
+    const signPubPem = ed25519PubToPem(sign.pub);
+    const encPrivPem = x25519PrivToPem(enc.seed);
+    const encPubPem = x25519PubToPem(enc.pub);
+    localStorage.setItem('cg_signing_key', bytesToHex(sign.seed));
+    localStorage.setItem('cg_enc_key', bytesToHex(enc.seed));
+    localStorage.setItem('cg_sign_pub_pem', signPubPem);
+    localStorage.setItem('cg_enc_pub_pem', encPubPem);
+    localStorage.setItem('cg_sign_priv_pem', signPrivPem);
+    localStorage.setItem('cg_enc_priv_pem', encPrivPem);
+    const out = document.getElementById('keyOutput');
+    out.classList.remove('hidden');
+    out.textContent = 'Signing Key (Ed25519):\n' + signPrivPem + '\n\nEncryption Key (X25519):\n' + encPrivPem;
+    document.getElementById('btnDownloadKeys').classList.remove('hidden');
+  } catch(e) { console.error(e); alert('Key generation failed: ' + e.message); }
+});
+
+document.getElementById('btnDownloadKeys').addEventListener('click', () => {
+  const sp = localStorage.getItem('cg_sign_priv_pem');
+  const ep = localStorage.getItem('cg_enc_priv_pem');
+  const blob = new Blob(['# Ed25519 Signing Key\n' + sp + '\n\n# X25519 Encryption Key\n' + ep + '\n'], {type:'text/plain'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'credential-gateway-keys.txt'; a.click();
+});
+
+document.getElementById('btnRegister').addEventListener('click', async () => {
+  const name = document.getElementById('appName').value.trim();
+  if (!name) return alert('Enter application name');
+  if (!SIGN_PUB_PEM() || !ENC_PUB_PEM()) return alert('Generate keys first');
+  try {
+    const resp = await fetch(GATEWAY_URL() + '/v1/applications', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name, ed25519_public_key: SIGN_PUB_PEM(), x25519_public_key: ENC_PUB_PEM() })
+    });
+    const data = await resp.json();
+    const r = document.getElementById('regResult'); r.classList.remove('hidden');
+    if (resp.ok) { localStorage.setItem('cg_app_id', data.id); r.innerHTML = '<span class="badge badge-ok">OK</span> App ID: <code>' + data.id + '</code>'; updateConnectionStatus(); }
+    else { r.innerHTML = '<span class="badge badge-err">Fail</span> ' + (data.error?.message || resp.status); }
+  } catch(e) { alert('Registration failed: ' + e.message); }
+});
+
+document.getElementById('btnStore').addEventListener('click', async () => {
+  const type = document.getElementById('credType').value;
+  const name = document.getElementById('credName').value.trim();
+  const value = document.getElementById('credValue').value;
+  const tags = document.getElementById('credTags').value.trim() || undefined;
+  if (!name || !value) return alert('Fill in name and value');
+  try {
+    const bodyObj = { type, name, value }; if (tags) bodyObj.tags = tags;
+    const body = JSON.stringify(bodyObj);
+    const sig = await signRequest(new TextEncoder().encode(body));
+    const resp = await fetch(GATEWAY_URL() + '/v1/credentials', {
+      method: 'POST', headers: {'Content-Type':'application/json', 'X-App-Id': APP_ID(), 'X-Signature': sig}, body
+    });
+    const data = await resp.json();
+    const r = document.getElementById('storeResult'); r.classList.remove('hidden');
+    if (resp.ok) { r.innerHTML = '<span class="badge badge-ok">Stored</span> ID: <code>' + data.id + '</code>'; document.getElementById('credValue').value = ''; }
+    else { r.innerHTML = '<span class="badge badge-err">Fail</span> ' + (data.error?.message || resp.status); }
+  } catch(e) { alert('Store failed: ' + e.message); }
+});
+
+document.getElementById('btnRetrieve').addEventListener('click', async () => {
+  const cid = document.getElementById('retrieveCredId').value.trim();
+  if (!cid) return alert('Enter credential ID');
+  try {
+    const sig = await signRequest(new TextEncoder().encode(''));
+    const resp = await fetch(GATEWAY_URL() + '/v1/credentials/' + cid, { headers: {'X-App-Id': APP_ID(), 'X-Signature': sig} });
+    const data = await resp.json();
+    const r = document.getElementById('retrieveResult');
+    if (!resp.ok) { r.classList.remove('hidden'); r.textContent='Error: '+(data.error?.message||resp.status); r.style.borderColor='#f87171'; r.style.color='#f87171'; return; }
+    const secret = await eciesDecrypt(data.encrypted_data, ENC_KEY_RAW());
+    r.classList.remove('hidden'); r.style.borderColor='#4ade80'; r.style.color='#4ade80'; r.textContent = secret;
+  } catch(e) { const r=document.getElementById('retrieveResult'); r.classList.remove('hidden'); r.style.borderColor='#f87171'; r.style.color='#f87171'; r.textContent='Decrypt failed: '+e.message; }
+});
+
+document.getElementById('btnRefreshList').addEventListener('click', loadCredList);
+
+async function loadCredList() {
+  try {
+    const sig = await signRequest(new TextEncoder().encode(''));
+    const resp = await fetch(GATEWAY_URL() + '/v1/credentials', { headers: {'X-App-Id': APP_ID(), 'X-Signature': sig} });
+    const data = await resp.json();
+    const el = document.getElementById('credList');
+    if (!resp.ok) { el.innerHTML='<span style="color:#f87171">Error: '+(data.error?.message||resp.status)+'</span>'; return; }
+    if (!data.length) { el.innerHTML='<span style="color:#888">No credentials yet</span>'; return; }
+    el.innerHTML = data.map(c =>
+      '<div class="cred-row"><div class="cred-info"><strong>'+esc(c.name)+'</strong><span>'+c.type+'</span></div>'+
+      '<div><code style="font-size:11px;color:#888;margin-right:8px">'+c.id.slice(0,8)+'...</code>'+
+      '<button class="btn-secondary btn-sm copy-id" data-id="'+c.id+'">Copy ID</button></div></div>'
+    ).join('');
+    document.querySelectorAll('.copy-id').forEach(b=>b.addEventListener('click',()=>{
+      navigator.clipboard.writeText(b.dataset.id); b.textContent='Copied!'; setTimeout(()=>b.textContent='Copy ID',1500);
+    }));
+  } catch(e) { document.getElementById('credList').innerHTML='<span style="color:#f87171">Error: '+e.message+'</span>'; }
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+updateConnectionStatus();
+const savedName = localStorage.getItem('cg_app_name');
+if (savedName) document.getElementById('appName').value = savedName;
+document.getElementById('appName').addEventListener('change', function() { localStorage.setItem('cg_app_name', this.value); });
+</script>
+</body>
+</html>
